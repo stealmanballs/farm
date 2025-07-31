@@ -1,0 +1,181 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  role          UserRole @default(CUSTOMER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  orders        Order[]
+  favorites     Favorite[]
+  reviews       Review[]
+  farm          Farm?
+}
+
+model Farm {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  address     String
+  city        String
+  state       String
+  zipCode     String
+  phone       String?
+  email       String?
+  website     String?
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  products    Product[]
+  reviews     Review[]
+  favorites   Favorite[]
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  unit        String      // e.g., "lb", "kg", "bunch", "piece"
+  image       String?
+  category    ProductCategory
+  organic     Boolean     @default(true)
+  inStock     Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  farmId      String
+  farm        Farm        @relation(fields: [farmId], references: [id])
+  orderItems  OrderItem[]
+  reviews     Review[]
+  favorites   Favorite[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  status        OrderStatus @default(PENDING)
+  subtotal      Float
+  commission    Float       // 7.5% of subtotal
+  total         Float
+  deliveryType  DeliveryType
+  deliveryFee   Float?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  quantity  Int
+  price     Float   // Price at time of purchase
+  createdAt DateTime @default(now())
+
+  // Relations
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  type      FavoriteType
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  farmId    String?
+  farm      Farm?    @relation(fields: [farmId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  @@unique([userId, farmId])
+  @@unique([userId, productId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int      // 1-5 stars
+  comment   String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  farmId    String?
+  farm      Farm?    @relation(fields: [farmId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+}
+
+enum UserRole {
+  CUSTOMER
+  FARMER
+  ADMIN
+}
+
+enum ProductCategory {
+  VEGETABLES
+  FRUITS
+  HERBS
+  DAIRY
+  MEAT
+  EGGS
+  BAKED_GOODS
+  HONEY
+  JAMS
+  OTHER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryType {
+  PICKUP
+  SHIPPING
+}
+
+enum FavoriteType {
+  FARM
+  PRODUCT
+}
