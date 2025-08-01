@@ -1,0 +1,75 @@
+name: AI Fix-Bot
+
+on:
+  pull_request:               # review every PR
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]          # optional: auto-patch direct pushes to main
+
+permissions:
+  contents: write             # so the bot can commit
+  pull-requests: write
+
+jobs:
+  ai-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # === 1. Grab the diff the way OpenAI likes it ===========
+      - name: Generate unified diff
+        id: diff
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }} --depth=1
+          BASE_SHA=$(git rev-parse FETCH_HEAD)
+          HEAD_SHA=$(git rev-parse HEAD)
+          git diff -U0 $BASE_SHA $HEAD_SHA > /tmp/pr.diff
+          echo "diff_size=$(wc -c < /tmp/pr.diff)" >> $GITHUB_OUTPUT
+
+      # Skip if nothing meaningful changed
+      - if: ${{ steps.diff.outputs.diff_size == '0' }}
+        run: echo "No code changes to review."
+
+      # === 2. Call OpenAI ======================================
+      - name: Ask GPT for a patch
+        id: gpt
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os, json, openai, textwrap, pathlib
+          openai.api_key = os.environ["OPENAI_API_KEY"]
+          diff = pathlib.Path("/tmp/pr.diff").read_text()
+          SYSTEM = "You are an elite software engineer. "\
+                   "Given a unified diff, return ONLY an improved patch "\
+                   "that can be applied with git apply."
+          USER = f"Here is the diff:\n\n{diff}\n\n---\nReturn the full patch:"
+          resp = openai.chat.completions.create(
+              model="gpt-4o-mini",
+              messages=[{"role":"system","content":SYSTEM},
+                        {"role":"user","content":USER}],
+              temperature=0
+          )
+          patch = resp.choices[0].message.content.strip()
+          pathlib.Path("/tmp/patch.diff").write_text(patch)
+          PY
+
+      # === 3A. *Comment-only* mode =============================
+      - name: Post review comment (safe)
+        if: ${{ env.AUTOCOMMIT != 'true' }}   # default path
+        uses: mshick/add-pr-comment@v2
+        with:
+          message-path: /tmp/patch.diff
+
+      # === 3B. *Auto-commit* mode ==============================
+      - name: Apply patch & push   # runs only if you flip AUTOCOMMIT
+        if: ${{ env.AUTOCOMMIT == 'true' }}
+        run: |
+          git apply --reject --whitespace=fix /tmp/patch.diff || true
+          if ! git diff --quiet; then
+            git config user.name  "ai-fix-bot"
+            git config user.email "actions@github.com"
+            git add -A
+            git commit -m "AI auto-fix: openai patch"
+            git push
+          fi
