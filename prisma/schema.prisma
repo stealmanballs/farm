@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,138 +7,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  phone         String?
-  address       String?
-  city          String?
-  state         String?
-  zipCode       String?
-  role          UserRole @default(CUSTOMER)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  orders        Order[]
-  favorites     Favorite[]
-  reviews       Review[]
-  farm          Farm?
-}
-
-model Farm {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  image       String?
-  address     String
-  city        String
-  state       String
-  zipCode     String
-  phone       String?
-  email       String?
-  website     String?
-  verified    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
-  products    Product[]
-  reviews     Review[]
-  favorites   Favorite[]
-}
-
-model Product {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  price       Float
-  unit        String      // e.g., "lb", "kg", "bunch", "piece"
-  image       String?
-  category    ProductCategory
-  organic     Boolean     @default(true)
-  inStock     Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  // Relations
-  farmId      String
-  farm        Farm        @relation(fields: [farmId], references: [id])
-  orderItems  OrderItem[]
-  reviews     Review[]
-  favorites   Favorite[]
-}
-
-model Order {
-  id            String      @id @default(cuid())
-  status        OrderStatus @default(PENDING)
-  subtotal      Float
-  commission    Float       // 7.5% of subtotal
-  total         Float
-  deliveryType  DeliveryType
-  deliveryFee   Float?
-  notes         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  // Relations
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  items         OrderItem[]
-}
-
-model OrderItem {
-  id        String  @id @default(cuid())
-  quantity  Int
-  price     Float   // Price at time of purchase
-  createdAt DateTime @default(now())
-
-  // Relations
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-}
-
-model Favorite {
-  id        String   @id @default(cuid())
-  type      FavoriteType
-  createdAt DateTime @default(now())
-
-  // Relations
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  farmId    String?
-  farm      Farm?    @relation(fields: [farmId], references: [id])
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
-
-  @@unique([userId, farmId])
-  @@unique([userId, productId])
-}
-
-model Review {
-  id        String   @id @default(cuid())
-  rating    Int      // 1-5 stars
-  comment   String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  farmId    String?
-  farm      Farm?    @relation(fields: [farmId], references: [id])
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
-}
-
 enum UserRole {
-  CUSTOMER
+  CONSUMER
   FARMER
   ADMIN
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum FarmStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  SUSPENDED
+}
+
+enum FarmMediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
 }
 
 enum ProductCategory {
@@ -154,28 +40,680 @@ enum ProductCategory {
   DAIRY
   MEAT
   EGGS
+  GRAINS
   BAKED_GOODS
-  HONEY
-  JAMS
+  PRESERVES
+  BEVERAGES
+  FLOWERS
   OTHER
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+enum InventoryAdjustmentType {
+  MANUAL
+  RESTOCK
+  SALE
+  WASTE
+  DAMAGE
+  EXPIRATION
+}
+
+enum DeliveryType {
+  PICKUP
+  LOCAL_DELIVERY
+  SHIPPING
 }
 
 enum OrderStatus {
   PENDING
   CONFIRMED
+  IN_PROGRESS
+  FULFILLED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  PENDING
   PREPARING
   READY_FOR_PICKUP
-  SHIPPED
+  IN_TRANSIT
   DELIVERED
   CANCELLED
 }
 
-enum DeliveryType {
-  PICKUP
-  SHIPPING
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
 }
 
-enum FavoriteType {
-  FARM
-  PRODUCT
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  ABANDONED
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  CUSTOM
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  REORDER_REMINDER
+  MESSAGE
+  ACCOUNT
+  PROMOTION
+}
+
+enum CertificationStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  PENDING
+}
+
+model User {
+  id                    String                   @id @default(cuid())
+  email                 String                   @unique
+  emailVerified         DateTime?
+  hashedPassword        String?
+  role                  UserRole                 @default(CONSUMER)
+  isActive              Boolean                  @default(true)
+  lastLoginAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  profile               Profile?
+  consumerProfile       ConsumerProfile?
+  farmerProfile         FarmerProfile?
+  preferences           ConsumerPreference?
+  cart                  Cart?
+
+  accounts              Account[]
+  sessions              Session[]
+
+  orders                Order[]                  @relation("ConsumerOrders")
+  payments              Payment[]
+  reviews               Review[]
+  favoriteFarms         FavoriteFarm[]
+  favoriteProducts      FavoriteProduct[]
+  notifications         Notification[]
+  savedSearches         SavedSearch[]
+  autoReorders          AutoReorderSetting[]
+  inventoryAdjustments  InventoryAdjustment[]    @relation("InventoryAdjustedBy")
+  messagesAsConsumer    Message[]                @relation("ConsumerMessages")
+  messagesAsFarmer      Message[]                @relation("FarmerMessages")
+  messagesSent          Message[]                @relation("MessageSender")
+}
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  displayName    String?
+  firstName      String?
+  lastName       String?
+  phone          String?
+  avatarUrl      String?
+  bio            String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  postalCode     String?
+  country        String?
+  latitude       Decimal? 
+  longitude      Decimal? 
+  timezone       String?
+  locale         String?  @default("en-US")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ConsumerProfile {
+  id                          String       @id @default(cuid())
+  userId                      String       @unique
+  defaultDeliveryType         DeliveryType?
+  defaultDeliveryInstructions String?
+  defaultPaymentMethod        String?
+  loyaltyStatus               String? @default("standard")
+  createdAt                   DateTime     @default(now())
+  updatedAt                   DateTime     @updatedAt
+
+  user                        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FarmerProfile {
+  id                          String             @id @default(cuid())
+  userId                      String             @unique
+  farmName                    String?
+  verificationStatus          VerificationStatus @default(UNVERIFIED)
+  verificationSubmittedAt     DateTime?
+  businessRegistrationNumber  String?
+  taxId                       String?
+  payoutEmail                 String?
+  platformFeeAcknowledgedAt   DateTime?
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+
+  user                        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farms                       Farm[]
+}
+
+model Farm {
+  id                   String       @id @default(cuid())
+  farmerProfileId      String
+  name                 String
+  slug                 String       @unique
+  headline             String?
+  description          String?
+  story                String?
+  phone                String?
+  email                String?
+  website              String?
+  supportEmail         String?
+  addressLine1         String
+  addressLine2         String?
+  city                 String
+  state                String
+  postalCode           String
+  country              String
+  latitude             Decimal?    
+  longitude            Decimal?    
+  shippingRadiusKm     Decimal?    
+  minOrderAmount       Decimal?    
+  pickupInstructions   String?
+  pickupSchedule       Json?
+  deliveryNotes        String?
+  tags                 String?
+  status               FarmStatus  @default(DRAFT)
+  onboardingCompleted  Boolean     @default(false)
+  heroImageUrl         String?
+  coverImageUrl        String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  farmer               FarmerProfile    @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
+  products             Product[]
+  deliveryOptions      DeliveryOption[]
+  media                FarmMedia[]
+  certifications       FarmCertification[]
+  reviews              Review[]
+  favorites            FavoriteFarm[]
+  orderItems           OrderItem[]
+  fulfillments         Fulfillment[]
+  cartItems            CartItem[]
+  messages             Message[]            @relation("FarmMessages")
+
+  @@index([farmerProfileId])
+  @@index([status])
+  @@index([latitude, longitude])
+}
+
+model FarmMedia {
+  id         String        @id @default(cuid())
+  farmId     String
+  url        String
+  type       FarmMediaType @default(IMAGE)
+  altText    String?
+  sortOrder  Int           @default(0)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  farm       Farm          @relation(fields: [farmId], references: [id], onDelete: Cascade)
+}
+
+model FarmCertification {
+  id                  String             @id @default(cuid())
+  farmId              String
+  name                String
+  issuer              String?
+  certificationNumber String?
+  issuedAt            DateTime?
+  expiresAt           DateTime?
+  mediaUrl            String?
+  status              CertificationStatus @default(PENDING)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  farm                Farm               @relation(fields: [farmId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id                   String         @id @default(cuid())
+  farmId               String
+  name                 String
+  slug                 String
+  sku                  String?
+  description          String?
+  price                Decimal        
+  currency             String         @default("USD")
+  unit                 String
+  minOrderQuantity     Int            @default(1)
+  maxOrderQuantity     Int?
+  stockQuantity        Int            @default(0)
+  leadTimeDays         Int?
+  organic              Boolean        @default(false)
+  seasonality          String?
+  category             ProductCategory
+  status               ProductStatus  @default(DRAFT)
+  tags                 String?
+  isFeatured           Boolean        @default(false)
+  farmPickupOnly       Boolean        @default(false)
+  expiresAt            DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  farm                 Farm           @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  images               ProductImage[]
+  inventoryAdjustments InventoryAdjustment[]
+  orderItems           OrderItem[]
+  reviews              Review[]
+  favorites            FavoriteProduct[]
+  autoReorders         AutoReorderSetting[]
+  cartItems            CartItem[]
+
+  @@unique([farmId, slug])
+  @@index([farmId, status])
+  @@index([category])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model InventoryAdjustment {
+  id              String                  @id @default(cuid())
+  productId       String
+  createdById     String?
+  adjustmentType  InventoryAdjustmentType
+  quantityChange  Int
+  note            String?
+  metadata        Json?
+  createdAt       DateTime                @default(now())
+
+  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy       User?                  @relation("InventoryAdjustedBy", fields: [createdById], references: [id])
+}
+
+model DeliveryOption {
+  id               String       @id @default(cuid())
+  farmId           String
+  type             DeliveryType
+  name             String?
+  description      String?
+  radiusKm         Decimal?     
+  fee              Decimal?     
+  minimumOrder     Decimal?     
+  schedule         Json?
+  cutoffTime       String?
+  isEnabled        Boolean      @default(true)
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  farm             Farm         @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  orderItems       OrderItem[]
+  fulfillments     Fulfillment[]
+  cartItems        CartItem[]
+  autoReorders     AutoReorderSetting[]
+
+  @@index([farmId])
+  @@index([type])
+}
+
+model Order {
+  id                   String        @id @default(cuid())
+  orderNumber          String        @unique
+  consumerId           String
+  status               OrderStatus   @default(PENDING)
+  deliveryType         DeliveryType
+  subtotal             Decimal       
+  shippingTotal        Decimal        @default(0)
+  platformFee          Decimal        @default(0)
+  taxTotal             Decimal        @default(0)
+  discountTotal        Decimal        @default(0)
+  total                Decimal       
+  currency             String        @default("USD")
+  notes                String?
+  deliveryAddress      Json?
+  deliveryInstructions String?
+  scheduledFor         DateTime?
+  cancelledAt          DateTime?
+  cancellationReason   String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  consumer             User          @relation("ConsumerOrders", fields: [consumerId], references: [id], onDelete: Cascade)
+  items                OrderItem[]
+  payments             Payment[]
+  fulfillments         Fulfillment[]
+  reviews              Review[]
+  messages             Message[] @relation("OrderMessages")
+}
+
+model OrderItem {
+  id                String            @id @default(cuid())
+  orderId           String
+  productId         String
+  farmId            String
+  deliveryOptionId  String?
+  quantity          Int
+  unitPrice         Decimal          
+  lineTotal         Decimal          
+  leadTimeDays      Int?
+  fulfillmentStatus FulfillmentStatus @default(PENDING)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  farm              Farm             @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  deliveryOption    DeliveryOption?  @relation(fields: [deliveryOptionId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([farmId])
+}
+
+model Payment {
+  id                   String        @id @default(cuid())
+  orderId              String
+  amount               Decimal       
+  status               PaymentStatus @default(PENDING)
+  provider             String?
+  method               String?
+  transactionReference String?
+  fee                  Decimal?      
+  processedAt          DateTime?
+  metadata             Json?
+  createdById          String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  order                Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy            User?         @relation(fields: [createdById], references: [id])
+
+  @@index([orderId])
+}
+
+model Fulfillment {
+  id                String            @id @default(cuid())
+  orderId           String
+  farmId            String?
+  deliveryOptionId  String?
+  status            FulfillmentStatus @default(PENDING)
+  trackingNumber    String?
+  carrier           String?
+  labelUrl          String?
+  estimatedDelivery DateTime?
+  fulfilledAt       DateTime?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  farm              Farm?            @relation(fields: [farmId], references: [id])
+  deliveryOption    DeliveryOption?  @relation(fields: [deliveryOptionId], references: [id])
+
+  @@index([orderId])
+}
+
+model FavoriteFarm {
+  id        String   @id @default(cuid())
+  userId    String
+  farmId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farm      Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, farmId])
+  @@index([farmId])
+}
+
+model FavoriteProduct {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+}
+
+model Cart {
+  id               String      @id @default(cuid())
+  userId           String      @unique
+  status           CartStatus  @default(ACTIVE)
+  deliveryType     DeliveryType?
+  zipCodeOverride  String?
+  geoLocation      Json?
+  lastActiveAt     DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items            CartItem[]
+}
+
+model CartItem {
+  id                      String      @id @default(cuid())
+  cartId                  String
+  productId               String
+  farmId                  String
+  deliveryOptionId        String?
+  autoReorderSettingId    String?
+  quantity                Int
+  unitPrice               Decimal     
+  lineTotal               Decimal     
+  addedAt                 DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  cart                    Cart        @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product                 Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  farm                    Farm        @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  deliveryOption          DeliveryOption?     @relation(fields: [deliveryOptionId], references: [id])
+  autoReorder             AutoReorderSetting? @relation(fields: [autoReorderSettingId], references: [id])
+
+  @@index([cartId])
+  @@index([productId])
+  @@index([farmId])
+}
+
+model Review {
+  id                 String   @id @default(cuid())
+  userId             String
+  farmId             String?
+  productId          String?
+  orderId            String?
+  rating             Int
+  title              String?
+  comment            String?
+  isVerifiedPurchase Boolean @default(false)
+  isFlagged          Boolean @default(false)
+  flaggedReason      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farm               Farm?    @relation(fields: [farmId], references: [id])
+  product            Product? @relation(fields: [productId], references: [id])
+  order              Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([farmId])
+  @@index([productId])
+  @@unique([userId, farmId], map: "unique_user_farm_review")
+  @@unique([userId, productId], map: "unique_user_product_review")
+}
+
+model Message {
+  id                String   @id @default(cuid())
+  consumerId        String
+  farmerId          String
+  senderId          String
+  farmId            String?
+  orderId           String?
+  subject           String?
+  body              String
+  metadata          Json?
+  readAt            DateTime?
+  archivedByConsumer Boolean @default(false)
+  archivedByFarmer   Boolean @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  consumer          User     @relation("ConsumerMessages", fields: [consumerId], references: [id], onDelete: Cascade)
+  farmer            User     @relation("FarmerMessages", fields: [farmerId], references: [id], onDelete: Cascade)
+  sender            User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  order             Order?   @relation("OrderMessages", fields: [orderId], references: [id])
+  farm              Farm?    @relation("FarmMessages", fields: [farmId], references: [id])
+
+  @@index([consumerId])
+  @@index([farmerId])
+  @@index([orderId])
+  @@index([farmId])
+}
+
+model ConsumerPreference {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  dietaryRestrictions     Json?
+  allergies               Json?
+  notificationPreferences Json?
+  preferredDeliveryType   DeliveryType?
+  maxDeliveryRadiusKm     Decimal? 
+  promoOptIn              Boolean  @default(true)
+  smsOptIn                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SavedSearch {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  filters     Json?
+  latitude    Decimal? 
+  longitude   Decimal? 
+  radiusKm    Decimal? 
+  isAutoNotify Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AutoReorderSetting {
+  id                String      @id @default(cuid())
+  userId            String
+  productId         String
+  deliveryOptionId  String?
+  quantity          Int         @default(1)
+  frequency         Frequency
+  customIntervalDays Int?
+  nextOrderDate     DateTime?
+  lastOrderDate     DateTime?
+  isActive          Boolean     @default(true)
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  deliveryOption    DeliveryOption? @relation(fields: [deliveryOptionId], references: [id])
+  cartItems         CartItem[]
+
+  @@unique([userId, productId])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  payload     Json?
+  readAt      DateTime?
+  sentAt      DateTime @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model Account {
+  id                        String   @id @default(cuid())
+  userId                    String
+  type                      String
+  provider                  String
+  providerAccountId         String
+  refresh_token             String?
+  refresh_token_expires_in  Int?
+  access_token              String?
+  expires_at                Int?
+  token_type                String?
+  scope                     String?
+  id_token                  String?
+  session_state             String?
+  oauth_token_secret        String?
+  oauth_token               String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
