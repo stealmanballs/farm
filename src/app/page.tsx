@@ -1,317 +1,791 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useMemo, useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Heart, Search, MapPin, Star, ShoppingCart } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Leaf, ShoppingCart, Store, UserRoundPlus } from "lucide-react"
+
+type ProfileType = "buyer" | "seller"
+
+type BaseForm = {
+  fullName: string
+  email: string
+  phone: string
+  location: string
+  notes: string
+}
+
+type BuyerForm = BaseForm & {
+  purchaseFrequency: "weekly" | "biweekly" | "monthly" | "seasonal" | ""
+  interests: string[]
+  preferredContact: "email" | "phone" | "text" | ""
+}
+
+type SellerForm = BaseForm & {
+  farmName: string
+  farmDescription: string
+  primaryProducts: string
+  fulfillment: "delivery" | "pickup" | "both" | ""
+  minimumOrder: string
+}
+
+type SavedProfile = {
+  id: string
+  type: ProfileType
+  createdAt: string
+  data: BuyerForm | SellerForm
+}
+
+const createEmptyBuyerForm = (): BuyerForm => ({
+  fullName: "",
+  email: "",
+  phone: "",
+  location: "",
+  notes: "",
+  purchaseFrequency: "",
+  interests: [],
+  preferredContact: "",
+})
+
+const createEmptySellerForm = (): SellerForm => ({
+  fullName: "",
+  email: "",
+  phone: "",
+  location: "",
+  notes: "",
+  farmName: "",
+  farmDescription: "",
+  primaryProducts: "",
+  fulfillment: "",
+  minimumOrder: "",
+})
+
+const newProfileId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+const buyerInterestOptions = [
+  { value: "vegetables", label: "Vegetables & greens" },
+  { value: "fruits", label: "Seasonal fruits" },
+  { value: "herbs", label: "Fresh herbs" },
+  { value: "eggs", label: "Eggs" },
+  { value: "dairy", label: "Dairy & cheese" },
+  { value: "meat", label: "Pasture-raised meat" },
+  { value: "honey", label: "Honey & sweeteners" },
+  { value: "baked-goods", label: "Baked goods" },
+  { value: "flowers", label: "Flowers & plants" },
+] as const;
+
+const buyerInterestLabelMap = new Map(buyerInterestOptions.map((option) => [option.value, option.label]));
+
+const formatBuyerInterests = (values: string[]) =>
+  values.map((value) => buyerInterestLabelMap.get(value) ?? value).filter(Boolean);
+
+const formatPreviewLabel = (key: string) =>
+  key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .trim();
+
 
 export default function Home() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [profileType, setProfileType] = useState<ProfileType>("buyer")
+  const [buyerForm, setBuyerForm] = useState<BuyerForm>(() => createEmptyBuyerForm())
+  const [sellerForm, setSellerForm] = useState<SellerForm>(() => createEmptySellerForm())
+  const [profiles, setProfiles] = useState<SavedProfile[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null)
 
-  // Mock data for demonstration
-  const categories = [
-    { id: "all", name: "All Products" },
-    { id: "vegetables", name: "Vegetables" },
-    { id: "fruits", name: "Fruits" },
-    { id: "dairy", name: "Dairy" },
-    { id: "meat", name: "Meat" },
-    { id: "eggs", name: "Eggs" },
-    { id: "baked", name: "Baked Goods" },
-  ]
+  const totals = useMemo(
+    () =>
+      profiles.reduce(
+        (acc, profile) => {
+          if (profile.type === "buyer") {
+            acc.buyers += 1
+          } else {
+            acc.sellers += 1
+          }
+          return acc
+        },
+        { buyers: 0, sellers: 0 }
+      ),
+    [profiles]
+  )
 
-  const products = [
-    {
-      id: "1",
-      name: "Organic Tomatoes",
-      description: "Fresh, vine-ripened organic tomatoes",
-      price: 4.99,
-      unit: "lb",
-      category: "vegetables",
-      farm: "Green Valley Farm",
-      farmImage: "/api/placeholder/40/40",
-      image: "/api/placeholder/300/200",
-      rating: 4.8,
-      inStock: true,
-      organic: true,
-    },
-    {
-      id: "2",
-      name: "Free Range Eggs",
-      description: "Farm-fresh eggs from happy chickens",
-      price: 6.50,
-      unit: "dozen",
-      category: "eggs",
-      farm: "Sunny Side Farm",
-      farmImage: "/api/placeholder/40/40",
-      image: "/api/placeholder/300/200",
-      rating: 4.9,
-      inStock: true,
-      organic: true,
-    },
-    {
-      id: "3",
-      name: "Organic Apples",
-      description: "Crisp, sweet organic apples",
-      price: 3.99,
-      unit: "lb",
-      category: "fruits",
-      farm: "Orchard Haven",
-      farmImage: "/api/placeholder/40/40",
-      image: "/api/placeholder/300/200",
-      rating: 4.7,
-      inStock: true,
-      organic: true,
-    },
-    {
-      id: "4",
-      name: "Artisan Sourdough",
-      description: "Handcrafted sourdough bread",
-      price: 8.00,
-      unit: "loaf",
-      category: "baked",
-      farm: "Rising Sun Bakery",
-      farmImage: "/api/placeholder/40/40",
-      image: "/api/placeholder/300/200",
-      rating: 4.9,
-      inStock: false,
-      organic: false,
-    },
-  ]
+  const updateBuyer = <K extends keyof BuyerForm>(field: K, value: BuyerForm[K]) => {
+    setBuyerForm((prev) => ({ ...prev, [field]: value }))
+  }
 
-  const featuredFarms = [
-    {
-      id: "1",
-      name: "Green Valley Farm",
-      description: "Family-owned organic farm since 1985",
-      image: "/api/placeholder/200/150",
-      rating: 4.8,
-      products: 25,
-      location: "Valley Springs, CA",
-    },
-    {
-      id: "2",
-      name: "Sunny Side Farm",
-      description: "Sustainable farming practices",
-      image: "/api/placeholder/200/150",
-      rating: 4.9,
-      products: 18,
-      location: "Sunset Valley, CA",
-    },
-    {
-      id: "3",
-      name: "Orchard Haven",
-      description: "Premium organic fruits and nuts",
-      image: "/api/placeholder/200/150",
-      rating: 4.7,
-      products: 32,
-      location: "Fruitland, CA",
-    },
-  ]
+  const updateSeller = <K extends keyof SellerForm>(field: K, value: SellerForm[K]) => {
+    setSellerForm((prev) => ({ ...prev, [field]: value }))
+  }
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         product.description.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  const setBuyerInterestChecked = (interest: string, checked: boolean) => {
+    setBuyerForm((prev) => {
+      const exists = prev.interests.includes(interest)
 
+      if (checked) {
+        if (exists) {
+          return prev
+        }
+
+        return { ...prev, interests: [...prev.interests, interest] }
+      }
+
+      if (!exists) {
+        return prev
+      }
+
+      return { ...prev, interests: prev.interests.filter((value) => value !== interest) }
+    })
+  }
+
+  const clearBuyerInterests = () => {
+    setBuyerForm((prev) => ({ ...prev, interests: [] }))
+  }
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (profileType === "buyer") {
+      const requiredBuyerFields: Array<"fullName" | "email" | "location"> = [
+        "fullName",
+        "email",
+        "location",
+      ]
+      const missingBuyerFields = requiredBuyerFields.filter((field) =>
+        buyerForm[field].trim().length === 0
+      )
+      if (missingBuyerFields.length > 0) {
+        setError("Please fill in the required buyer details.")
+        return
+      }
+
+      const profileId = newProfileId()
+      const entry: SavedProfile = {
+        id: profileId,
+        type: "buyer",
+        createdAt: new Date().toLocaleString(),
+        data: { ...buyerForm },
+      }
+
+      setProfiles((prev) => [entry, ...prev])
+      setBuyerForm(createEmptyBuyerForm())
+      setError(null)
+      setLastCreatedId(profileId)
+      return
+    }
+
+    const requiredSellerFields: Array<"fullName" | "email" | "location" | "farmName"> = [
+      "fullName",
+      "email",
+      "location",
+      "farmName",
+    ]
+    const missingSellerFields = requiredSellerFields.filter((field) =>
+      sellerForm[field].trim().length === 0
+    )
+    if (missingSellerFields.length > 0) {
+      setError("Please complete the required seller details.")
+      return
+    }
+
+    const profileId = newProfileId()
+    const entry: SavedProfile = {
+      id: profileId,
+      type: "seller",
+      createdAt: new Date().toLocaleString(),
+      data: { ...sellerForm },
+    }
+
+    setProfiles((prev) => [entry, ...prev])
+    setSellerForm(createEmptySellerForm())
+    setError(null)
+    setLastCreatedId(profileId)
+
+  const activeForm = profileType === "buyer" ? buyerForm : sellerForm
+
+  const previewEntries = useMemo(() => {
+    const currentForm = profileType === "buyer" ? buyerForm : sellerForm
+
+    return Object.entries(currentForm).reduce<Array<{ key: string; label: string; value: string }>>(
+      (acc, [key, value]) => {
+        if (typeof value === "string") {
+          const trimmed = value.trim()
+          if (trimmed.length === 0) {
+            return acc
+          }
+
+          acc.push({
+            key,
+            label: formatPreviewLabel(key),
+            value: trimmed,
+          })
+          return acc
+        }
+
+        if (Array.isArray(value)) {
+          if (value.length === 0) {
+            return acc
+          }
+
+          const formatted = formatBuyerInterests(value)
+          if (formatted.length === 0) {
+            return acc
+          }
+
+          acc.push({
+            key,
+            label: formatPreviewLabel(key),
+            value: formatted.join(', '),
+          })
+        }
+
+        return acc
+      },
+      []
+    )
+  }, [profileType, buyerForm, sellerForm])
+
+  const selectedBuyerInterests = useMemo(
+    () => formatBuyerInterests(buyerForm.interests),
+    [buyerForm.interests]
+  )
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-white">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-green-600 to-green-700 text-white py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-4">
-            Farm Direct Marketplace
+    <div className="min-h-screen bg-gradient-to-br from-lime-50 via-green-50 to-white">
+      <div className="container mx-auto max-w-5xl px-4 py-12">
+        <header className="mb-10 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700">
+            <Leaf className="h-7 w-7" />
+          </div>
+          <h1 className="text-3xl font-semibold text-gray-900 md:text-4xl">
+            Build Your Farm Marketplace Profile
           </h1>
-          <p className="text-xl md:text-2xl mb-8 opacity-90">
-            Connect directly with local organic farmers and get fresh produce delivered to your door
+          <p className="mt-3 text-base text-gray-600 md:text-lg">
+            Choose whether you are here to buy or sell and create a profile that helps the community learn more about you.
           </p>
-          <div className="flex flex-col md:flex-row gap-4 max-w-2xl mx-auto">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search for fresh produce..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 text-gray-900"
-              />
-            </div>
-            <Button size="lg" className="bg-white text-green-700 hover:bg-gray-100">
-              Search
-            </Button>
-          </div>
-        </div>
-      </section>
+        </header>
 
-      {/* Categories */}
-      <section className="py-8 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-wrap gap-2 justify-center">
-            {categories.map((category) => (
-              <Button
-                key={category.id}
-                variant={selectedCategory === category.id ? "default" : "outline"}
-                onClick={() => setSelectedCategory(category.id)}
-                className={selectedCategory === category.id ? "bg-green-600 hover:bg-green-700" : ""}
-              >
-                {category.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </section>
+        <main className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+          <Card className="backdrop-blur">
+            <CardHeader>
+              <CardTitle>Create a profile</CardTitle>
+              <CardDescription>
+                Select the profile type and fill in the details. Required fields are marked with an asterisk.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div>
+                <Label className="mb-2 block text-sm font-medium text-gray-700">I am joining as</Label>
+                <RadioGroup
+                  value={profileType}
+                  onValueChange={(value) => {
+                    setProfileType(value as ProfileType)
+                    setError(null)
+                  }}
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  <div
+                    className={`border-input hover:border-green-400 focus-within:border-green-500 focus-within:ring-green-200 group flex items-start gap-3 rounded-lg border bg-white/80 px-3 py-3 shadow-sm transition focus-within:ring-4 ${profileType === "buyer" ? "border-green-500 ring-2 ring-green-200" : ""}`}
+                  >
+                    <RadioGroupItem id="profile-buyer" value="buyer" className="mt-1" />
+                    <Label htmlFor="profile-buyer" className="cursor-pointer space-y-1">
+                      <span className="flex items-center gap-2 font-medium text-gray-900">
+                        <ShoppingCart className="h-4 w-4 text-green-600" />
+                        Buyer profile
+                      </span>
+                      <span className="text-sm text-gray-600">Find fresh produce and connect with farms.</span>
+                    </Label>
+                  </div>
 
-      {/* Featured Farms */}
-      <section className="py-12">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-8 text-gray-800">Featured Farms</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredFarms.map((farm) => (
-              <Card key={farm.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-green-100 to-green-200 relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-6xl text-green-600">🌱</div>
+                  <div
+                    className={`border-input hover:border-green-400 focus-within:border-green-500 focus-within:ring-green-200 group flex items-start gap-3 rounded-lg border bg-white/80 px-3 py-3 shadow-sm transition focus-within:ring-4 ${profileType === "seller" ? "border-green-500 ring-2 ring-green-200" : ""}`}
+                  >
+                    <RadioGroupItem id="profile-seller" value="seller" className="mt-1" />
+                    <Label htmlFor="profile-seller" className="cursor-pointer space-y-1">
+                      <span className="flex items-center gap-2 font-medium text-gray-900">
+                        <Store className="h-4 w-4 text-green-600" />
+                        Seller profile
+                      </span>
+                      <span className="text-sm text-gray-600">Showcase your farm and products to buyers.</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full name *</Label>
+                    <Input
+                      id="fullName"
+                      value={activeForm.fullName}
+                      placeholder="Alex Johnson"
+                      onChange={(event) => {
+                        if (profileType === "buyer") {
+                          updateBuyer("fullName", event.target.value)
+                        } else {
+                          updateSeller("fullName", event.target.value)
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={activeForm.email}
+                      placeholder="alex@example.com"
+                      onChange={(event) => {
+                        if (profileType === "buyer") {
+                          updateBuyer("email", event.target.value)
+                        } else {
+                          updateSeller("email", event.target.value)
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={activeForm.phone}
+                      placeholder="(555) 123-4567"
+                      onChange={(event) => {
+                        if (profileType === "buyer") {
+                          updateBuyer("phone", event.target.value)
+                        } else {
+                          updateSeller("phone", event.target.value)
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="location">City or region *</Label>
+                    <Input
+                      id="location"
+                      value={activeForm.location}
+                      placeholder="Napa Valley, CA"
+                      onChange={(event) => {
+                        if (profileType === "buyer") {
+                          updateBuyer("location", event.target.value)
+                        } else {
+                          updateSeller("location", event.target.value)
+                        }
+                      }}
+                    />
                   </div>
                 </div>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-semibold">{farm.name}</h3>
-                    <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{farm.rating}</span>
-                    </div>
-                  </div>
-                  <p className="text-gray-600 mb-3">{farm.description}</p>
-                  <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
-                    <MapPin className="h-4 w-4" />
-                    <span>{farm.location}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">{farm.products} products</span>
-                    <Button variant="outline" size="sm">
-                      View Farm
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Products Grid */}
-      <section className="py-12 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-8 text-gray-800">Fresh Products</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProducts.map((product) => (
-              <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-green-100 to-green-200 relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-6xl text-green-600">🥬</div>
-                  </div>
-                  <div className="absolute top-2 right-2">
-                    <Button variant="ghost" size="sm" className="p-2">
-                      <Heart className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  {!product.inStock && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                      <Badge variant="secondary" className="bg-red-100 text-red-800">
-                        Out of Stock
-                      </Badge>
+                {profileType === "buyer" ? (
+                  <div className="space-y-5">
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>How often do you buy?</Label>
+                        <Select
+                          value={buyerForm.purchaseFrequency}
+                          onValueChange={(value) => updateBuyer("purchaseFrequency", value as BuyerForm["purchaseFrequency"])}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose an option" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="biweekly">Every two weeks</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="seasonal">Seasonally</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Preferred contact</Label>
+                        <Select
+                          value={buyerForm.preferredContact}
+                          onValueChange={(value) => updateBuyer("preferredContact", value as BuyerForm["preferredContact"])}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a contact method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="phone">Phone call</SelectItem>
+                            <SelectItem value="text">Text message</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="interests">What are you shopping for?</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="flex w-full items-center justify-between gap-2 text-left"
+                          >
+                            <span
+                              className={
+                                selectedBuyerInterests.length === 0
+                                  ? "truncate text-sm text-muted-foreground"
+                                  : "truncate text-sm text-gray-900"
+                              }
+                            >
+                              {selectedBuyerInterests.length === 0
+                                ? "Select all categories that match your interests"
+                                : "Selected: " + selectedBuyerInterests.join(", ")}
+                            </span>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 space-y-3 p-4" align="start">
+                          <div className="max-h-60 space-y-1 overflow-y-auto pr-1">
+                            {buyerInterestOptions.map((option) => {
+                              const checked = buyerForm.interests.includes(option.value)
+                              return (
+                                <div
+                                  key={option.value}
+                                  className="flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-sm text-gray-800 transition hover:bg-green-50"
+                                  onClick={() => setBuyerInterestChecked(option.value, !checked)}
+                                >
+                                  <span>{option.label}</span>
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(next) =>
+                                      setBuyerInterestChecked(option.value, next === true)
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {buyerForm.interests.length > 0 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-center text-xs text-green-700 hover:text-green-800"
+                              onClick={clearBuyerInterests}
+                            >
+                              Clear selection
+                            </Button>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                      {selectedBuyerInterests.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {selectedBuyerInterests.map((label) => (
+                            <Badge
+                              key={`buyer-interest-${label}`}
+                              variant="secondary"
+                              className="bg-green-100 text-green-700"
+                            >
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="farmName">Farm or business name *</Label>
+                      <Input
+                        id="farmName"
+                        value={sellerForm.farmName}
+                        placeholder="Sunny Acres Farm"
+                        onChange={(event) => updateSeller("farmName", event.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="farmDescription">Short description</Label>
+                      <Textarea
+                        id="farmDescription"
+                        rows={3}
+                        placeholder="Family-run farm specializing in seasonal produce."
+                        value={sellerForm.farmDescription}
+                        onChange={(event) => updateSeller("farmDescription", event.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="primaryProducts">Primary products</Label>
+                      <Textarea
+                        id="primaryProducts"
+                        rows={2}
+                        placeholder="Heirloom tomatoes, mixed greens, fresh herbs"
+                        value={sellerForm.primaryProducts}
+                        onChange={(event) => updateSeller("primaryProducts", event.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>How do you fulfill orders?</Label>
+                        <Select
+                          value={sellerForm.fulfillment}
+                          onValueChange={(value) => updateSeller("fulfillment", value as SellerForm["fulfillment"])}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose a method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pickup">Local pickup</SelectItem>
+                            <SelectItem value="delivery">Local delivery</SelectItem>
+                            <SelectItem value="both">Pickup and delivery</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="minimumOrder">Minimum order (optional)</Label>
+                        <Input
+                          id="minimumOrder"
+                          value={sellerForm.minimumOrder}
+                          placeholder="$50 order minimum"
+                          onChange={(event) => updateSeller("minimumOrder", event.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes for the community</Label>
+                  <Textarea
+                    id="notes"
+                    rows={3}
+                    placeholder="Share any other details, requests, or helpful information."
+                    value={activeForm.notes}
+                    onChange={(event) => {
+                      if (profileType === "buyer") {
+                        updateBuyer("notes", event.target.value)
+                      } else {
+                        updateSeller("notes", event.target.value)
+                      }
+                    }}
+                  />
                 </div>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Avatar className="h-6 w-6">
-                      <AvatarImage src={product.farmImage} />
-                      <AvatarFallback>🌾</AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm text-gray-600">{product.farm}</span>
-                  </div>
-                  <h3 className="font-semibold mb-1">{product.name}</h3>
-                  <p className="text-sm text-gray-600 mb-3">{product.description}</p>
-                  <div className="flex items-center gap-2 mb-3">
-                    {product.organic && (
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        Organic
-                      </Badge>
-                    )}
-                    <div className="flex items-center gap-1">
-                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                      <span className="text-xs">{product.rating}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-lg font-bold text-green-600">${product.price}</span>
-                      <span className="text-sm text-gray-500">/{product.unit}</span>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      disabled={!product.inStock}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <ShoppingCart className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* How It Works */}
-      <section className="py-12">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-8 text-gray-800">How It Works</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">1</span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Browse Products</h3>
-              <p className="text-gray-600">Explore fresh, organic products from local farms in your area</p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">2</span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Place Order</h3>
-              <p className="text-gray-600">Choose pickup or delivery options that work best for you</p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">3</span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Enjoy Freshness</h3>
-              <p className="text-gray-600">Get farm-fresh products delivered or pick them up locally</p>
-            </div>
-          </div>
-        </div>
-      </section>
+                {error && (
+                  <p className="text-sm font-medium text-red-600" role="alert">
+                    {error}
+                  </p>
+                )}
 
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-8">
-        <div className="container mx-auto px-4 text-center">
-          <h3 className="text-2xl font-bold mb-4">Farm Direct Marketplace</h3>
-          <p className="mb-4">Connecting communities with fresh, local, organic produce</p>
-          <div className="flex justify-center gap-4 text-sm">
-            <span>🌱 100% Organic</span>
-            <span>🚚 Local Delivery</span>
-            <span>🏪 Farm Direct</span>
-            <span>💰 7.5% Platform Fee</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="submit" className="bg-green-600 hover:bg-green-700">
+                    Save profile
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (profileType === "buyer") {
+                        setBuyerForm(createEmptyBuyerForm())
+                      } else {
+                        setSellerForm(createEmptySellerForm())
+                      }
+                      setError(null)
+                    }}
+                  >
+                    Clear form
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80">
+            <CardHeader>
+              <CardTitle>Profile overview</CardTitle>
+              <CardDescription>
+                Track who has joined so far and preview the information you are about to save.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between rounded-lg border bg-gradient-to-r from-green-100 to-green-50 px-4 py-3">
+                  <span className="flex items-center gap-2 text-sm font-medium text-green-800">
+                    <UserRoundPlus className="h-4 w-4" />
+                    Total profiles
+                  </span>
+                  <Badge variant="secondary" className="bg-white text-green-700">
+                    {profiles.length}
+                  </Badge>
+                </div>
+                <div className="flex justify-between rounded-lg border px-4 py-3">
+                  <span className="text-sm font-medium text-gray-700">Buyers</span>
+                  <span className="text-sm text-gray-600">{totals.buyers}</span>
+                </div>
+                <div className="flex justify-between rounded-lg border px-4 py-3">
+                  <span className="text-sm font-medium text-gray-700">Sellers</span>
+                  <span className="text-sm text-gray-600">{totals.sellers}</span>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">Live preview</h2>
+                {previewEntries.length === 0 ? (
+                  <p className="mt-2 text-sm text-gray-600">
+                    Start filling out the form to see a preview of your profile details.
+                  </p>
+                ) : (
+                  <dl className="mt-3 space-y-2 text-sm">
+                    {previewEntries.map((entry) => (
+                      <div key={entry.key} className="flex flex-col rounded-md border bg-white px-3 py-2">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          {entry.label}
+                        </dt>
+                        <dd className="text-gray-800">{entry.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+
+        <section className="mt-12">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">Recently created profiles</h2>
+            {profiles.length > 0 && (
+              <p className="text-sm text-gray-600">
+                Showing {profiles.length} saved {profiles.length === 1 ? "profile" : "profiles"}.
+              </p>
+            )}
           </div>
-        </div>
-      </footer>
+
+          {profiles.length === 0 ? (
+            <Card className="bg-white/70">
+              <CardContent className="py-8 text-center text-sm text-gray-600">
+                Profiles that you create will appear here. Add one using the form above to get started.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {profiles.map((profile) => {
+                const data = profile.data
+                const isBuyer = profile.type === "buyer"
+                const buyerData = isBuyer ? (data as BuyerForm) : null
+                const sellerData = !isBuyer ? (data as SellerForm) : null
+
+                return (
+                  <Card
+                    key={profile.id}
+                    className={`bg-white/90 transition ${profile.id === lastCreatedId ? "border-green-500 ring-2 ring-green-200" : ""}`}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <CardTitle className="text-lg font-semibold text-gray-900">
+                            {data.fullName || "Unnamed profile"}
+                          </CardTitle>
+                          <CardDescription>
+                            Added on {profile.createdAt}
+                          </CardDescription>
+                        </div>
+                        <Badge className={isBuyer ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}>
+                          {isBuyer ? "Buyer" : "Seller"}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <div className="flex justify-between text-gray-700">
+                        <span>Email</span>
+                        <span className="text-gray-900">{data.email || "�"}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-700">
+                        <span>Phone</span>
+                        <span className="text-gray-900">{data.phone || "Not provided"}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-700">
+                        <span>Location</span>
+                        <span className="text-gray-900">{data.location || "Not provided"}</span>
+                      </div>
+
+                      {isBuyer && buyerData ? (
+                        <>
+                          <div className="flex justify-between text-gray-700">
+                            <span>Frequency</span>
+                            <span className="text-gray-900">{buyerData.purchaseFrequency || "Not provided"}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-700">
+                            <span>Contact</span>
+                            <span className="text-gray-900">{buyerData.preferredContact || "Not provided"}</span>
+                          </div>
+                          <div className="text-gray-700">
+                            <span className="font-medium text-gray-800">Interests</span>
+                            {buyerData.interests.length === 0 ? (
+                              <p className="mt-1 text-gray-900">No preferences shared yet.</p>
+                            ) : (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {formatBuyerInterests(buyerData.interests).map((label) => (
+                                  <Badge
+                                    key={`${profile.id}-interest-${label}`}
+                                    variant="secondary"
+                                    className="bg-green-100 text-green-700"
+                                  >
+                                    {label}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : null}
+
+                      {!isBuyer && sellerData ? (
+                        <>
+                          <div className="flex justify-between text-gray-700">
+                            <span>Farm name</span>
+                            <span className="text-gray-900">{sellerData.farmName || "Not provided"}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-700">
+                            <span>Fulfillment</span>
+                            <span className="text-gray-900">{sellerData.fulfillment || "Not provided"}</span>
+                          </div>
+                          <div className="text-gray-700">
+                            <span className="font-medium text-gray-800">Products</span>
+                            <p className="mt-1 text-gray-900">
+                              {sellerData.primaryProducts || "No products listed yet."}
+                            </p>
+                          </div>
+                        </>
+                      ) : null}
+
+                      {data.notes && (
+                        <div className="text-gray-700">
+                          <span className="font-medium text-gray-800">Notes</span>
+                          <p className="mt-1 text-gray-900">{data.notes}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   )
 }
