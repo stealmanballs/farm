@@ -210,6 +210,7 @@ export default function Home() {
     setSellerForm(createEmptySellerForm())
     setError(null)
     setLastCreatedId(profileId)
+  }
 
   const activeForm = profileType === "buyer" ? buyerForm : sellerForm
 
