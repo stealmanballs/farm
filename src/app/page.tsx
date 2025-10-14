@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Leaf, ShoppingCart, Store, UserRoundPlus } from "lucide-react"
+import { Leaf, Plus, ShoppingCart, Store, Trash2, UserRoundPlus } from "lucide-react"
 
 type ProfileType = "buyer" | "seller"
 
@@ -30,13 +30,25 @@ type BuyerForm = BaseForm & {
   preferredContact: "email" | "phone" | "text" | ""
 }
 
+type SellerProduct = {
+  id: string
+  name: string
+  price: string
+  unit: string
+  inventory: string
+  image: string | null
+  notes: string
+}
+
 type SellerForm = BaseForm & {
   farmName: string
   farmDescription: string
   primaryProducts: string
   fulfillment: "delivery" | "pickup" | "both" | ""
   minimumOrder: string
+  products: SellerProduct[]
 }
+
 
 type SavedProfile = {
   id: string
@@ -67,6 +79,17 @@ const createEmptySellerForm = (): SellerForm => ({
   primaryProducts: "",
   fulfillment: "",
   minimumOrder: "",
+  products: [],
+})
+
+const createEmptySellerProduct = (): SellerProduct => ({
+  id: newProfileId(),
+  name: "",
+  price: "",
+  unit: "",
+  inventory: "",
+  image: null,
+  notes: "",
 })
 
 const newProfileId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -103,6 +126,12 @@ export default function Home() {
   const [profiles, setProfiles] = useState<SavedProfile[]>([])
   const [error, setError] = useState<string | null>(null)
   const [lastCreatedId, setLastCreatedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (profileType === "seller" && sellerForm.products.length === 0) {
+      setSellerForm((prev) => ({ ...prev, products: [createEmptySellerProduct()] }))
+    }
+  }, [profileType, sellerForm.products.length, setSellerForm])
 
   const totals = useMemo(
     () =>
@@ -152,6 +181,55 @@ export default function Home() {
     setBuyerForm((prev) => ({ ...prev, interests: [] }))
   }
 
+  const addSellerProduct = () => {
+    setSellerForm((prev) => ({ ...prev, products: [...prev.products, createEmptySellerProduct()] }))
+  }
+
+  const updateSellerProduct = <K extends keyof SellerProduct>(
+    productId: string,
+    field: K,
+    value: SellerProduct[K]
+  ) => {
+    setSellerForm((prev) => ({
+      ...prev,
+      products: prev.products.map((product) =>
+        product.id === productId ? { ...product, [field]: value } : product
+      ),
+    }))
+  }
+
+  const removeSellerProduct = (productId: string) => {
+    setSellerForm((prev) => ({
+      ...prev,
+      products: prev.products.filter((product) => product.id !== productId),
+    }))
+  }
+
+  const handleSellerProductImageChange = (productId: string, files: FileList | null) => {
+    if (!files || files.length === 0) {
+      updateSellerProduct(productId, "image", null)
+      return
+    }
+
+    const file = files.item(0)
+    if (!file) {
+      updateSellerProduct(productId, "image", null)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        updateSellerProduct(productId, "image", reader.result)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const clearSellerProducts = () => {
+    setSellerForm((prev) => ({ ...prev, products: [] }))
+  }
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -198,12 +276,42 @@ export default function Home() {
       return
     }
 
+    if (sellerForm.products.length === 0) {
+      setError("Please add at least one product to your catalog.")
+      return
+    }
+
+    const incompleteProducts = sellerForm.products.filter((product) =>
+      product.name.trim().length === 0 || product.price.trim().length === 0
+    )
+    if (incompleteProducts.length > 0) {
+      setError("Please fill in a name and price for each product.")
+      return
+    }
+
+    const invalidPriceProducts = sellerForm.products.filter((product) =>
+      Number.isNaN(Number(product.price))
+    )
+    if (invalidPriceProducts.length > 0) {
+      setError("Product prices must be numeric (examples: 4.99, 12, 2.5).")
+      return
+    }
+
+    const sanitizedProducts = sellerForm.products.map((product) => ({
+      ...product,
+      name: product.name.trim(),
+      price: product.price.trim(),
+      unit: product.unit.trim(),
+      inventory: product.inventory.trim(),
+      notes: product.notes.trim(),
+    }))
+
     const profileId = newProfileId()
     const entry: SavedProfile = {
       id: profileId,
       type: "seller",
       createdAt: new Date().toLocaleString(),
-      data: { ...sellerForm },
+      data: { ...sellerForm, products: sanitizedProducts },
     }
 
     setProfiles((prev) => [entry, ...prev])
@@ -215,48 +323,94 @@ export default function Home() {
   const activeForm = profileType === "buyer" ? buyerForm : sellerForm
 
   const previewEntries = useMemo(() => {
-    const currentForm = profileType === "buyer" ? buyerForm : sellerForm
-
-    return Object.entries(currentForm).reduce<Array<{ key: string; label: string; value: string }>>(
-      (acc, [key, value]) => {
-        if (typeof value === "string") {
-          const trimmed = value.trim()
-          if (trimmed.length === 0) {
-            return acc
-          }
-
-          acc.push({
-            key,
-            label: formatPreviewLabel(key),
-            value: trimmed,
-          })
-          return acc
+    if (profileType === "buyer") {
+      const entries: Array<{ key: string; label: string; value: string }> = []
+      const push = (key: string, rawValue: string | null | undefined) => {
+        const trimmed = (rawValue ?? "").toString().trim()
+        if (trimmed.length === 0) {
+          return
         }
 
-        if (Array.isArray(value)) {
-          if (value.length === 0) {
-            return acc
-          }
+        entries.push({
+          key,
+          label: formatPreviewLabel(key),
+          value: trimmed,
+        })
+      }
 
-          const formatted = formatBuyerInterests(value)
-          if (formatted.length === 0) {
-            return acc
-          }
+      push("fullName", buyerForm.fullName)
+      push("email", buyerForm.email)
+      push("phone", buyerForm.phone)
+      push("location", buyerForm.location)
+      push("purchaseFrequency", buyerForm.purchaseFrequency)
+      push("preferredContact", buyerForm.preferredContact)
+      push("notes", buyerForm.notes)
 
-          acc.push({
-            key,
-            label: formatPreviewLabel(key),
-            value: formatted.join(', '),
+      if (buyerForm.interests.length > 0) {
+        const formatted = formatBuyerInterests(buyerForm.interests)
+        if (formatted.length > 0) {
+          entries.push({
+            key: "interests",
+            label: formatPreviewLabel("interests"),
+            value: formatted.join(", "),
           })
         }
+      }
 
-        return acc
-      },
-      []
-    )
+      return entries
+    }
+
+    const entries: Array<{ key: string; label: string; value: string }> = []
+    const push = (key: string, rawValue: string | null | undefined) => {
+      const trimmed = (rawValue ?? "").toString().trim()
+      if (trimmed.length === 0) {
+        return
+      }
+
+      entries.push({
+        key,
+        label: formatPreviewLabel(key),
+        value: trimmed,
+      })
+    }
+
+    push("fullName", sellerForm.fullName)
+    push("email", sellerForm.email)
+    push("phone", sellerForm.phone)
+    push("location", sellerForm.location)
+    push("farmName", sellerForm.farmName)
+    push("farmDescription", sellerForm.farmDescription)
+    push("primaryProducts", sellerForm.primaryProducts)
+    push("fulfillment", sellerForm.fulfillment)
+    push("minimumOrder", sellerForm.minimumOrder)
+    push("notes", sellerForm.notes)
+
+    if (sellerForm.products.length > 0) {
+      const summary = sellerForm.products
+        .map((product) => {
+          const name = product.name.trim() || "Unnamed product"
+          const price = product.price.trim()
+          const unit = product.unit.trim()
+          const priceLabel =
+            price.length > 0 ? "$" + price + (unit.length > 0 ? "/" + unit : "") : ""
+          return priceLabel.length > 0 ? name + " (" + priceLabel + ")" : name
+        })
+        .join(", ")
+        .trim()
+
+      if (summary.length > 0) {
+        entries.push({
+          key: "products",
+          label: formatPreviewLabel("products"),
+          value: summary,
+        })
+      }
+    }
+
+    return entries
   }, [profileType, buyerForm, sellerForm])
 
-  const selectedBuyerInterests = useMemo(
+const selectedBuyerInterests = useMemo(
     () => formatBuyerInterests(buyerForm.interests),
     [buyerForm.interests]
   )

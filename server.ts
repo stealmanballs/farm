@@ -1,10 +1,22 @@
 // server.ts - Next.js Standalone + Socket.IO
+// Load environment variables from a local .env file when present
+import 'dotenv/config';
 import { setupSocket } from '@/lib/socket';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import next from 'next';
 
 const dev = process.env.NODE_ENV !== 'production';
+// Server-side secret keys (set these in a .env.local file or in your environment)
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GITHUB_API_KEY = process.env.GITHUB_API_KEY || process.env.GITHUB_TOKEN;
+
+if (!OPENAI_API_KEY) {
+  console.warn('Warning: OPENAI_API_KEY is not set. Add it to a .env.local file or set it in the environment.');
+}
+if (!GITHUB_API_KEY) {
+  console.warn('Warning: GITHUB_API_KEY (or GITHUB_TOKEN) is not set. Add it to a .env.local file or set it in the environment.');
+}
 const currentPort = 3000;
 const hostname = '0.0.0.0';
 
