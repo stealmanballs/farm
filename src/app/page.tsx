@@ -255,6 +255,10 @@ export default function Home() {
     )
   }, [profileType, buyerForm, sellerForm])
 
+  const selectedBuyerInterests = useMemo(
+    () => formatBuyerInterests(buyerForm.interests),
+    [buyerForm.interests]
+  )
   return (
     <div className="min-h-screen bg-gradient-to-br from-lime-50 via-green-50 to-white">
       <div className="container mx-auto max-w-5xl px-4 py-12">
@@ -426,12 +430,74 @@ export default function Home() {
 
                     <div className="space-y-2">
                       <Label htmlFor="interests">What are you shopping for?</Label>
-                      <Input
-                        id="interests"
-                        value={buyerForm.interests}
-                        placeholder="Organic vegetables, free-range eggs, local honey"
-                        onChange={(event) => updateBuyer("interests", event.target.value)}
-                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="flex w-full items-center justify-between gap-2 text-left"
+                          >
+                            <span
+                              className={
+                                selectedBuyerInterests.length === 0
+                                  ? "truncate text-sm text-muted-foreground"
+                                  : "truncate text-sm text-gray-900"
+                              }
+                            >
+                              {selectedBuyerInterests.length === 0
+                                ? "Select all categories that match your interests"
+                                : "Selected: " + selectedBuyerInterests.join(", ")}
+                            </span>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 space-y-3 p-4" align="start">
+                          <div className="max-h-60 space-y-1 overflow-y-auto pr-1">
+                            {buyerInterestOptions.map((option) => {
+                              const checked = buyerForm.interests.includes(option.value)
+                              return (
+                                <div
+                                  key={option.value}
+                                  className="flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-sm text-gray-800 transition hover:bg-green-50"
+                                  onClick={() => setBuyerInterestChecked(option.value, !checked)}
+                                >
+                                  <span>{option.label}</span>
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(next) =>
+                                      setBuyerInterestChecked(option.value, next === true)
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {buyerForm.interests.length > 0 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-center text-xs text-green-700 hover:text-green-800"
+                              onClick={clearBuyerInterests}
+                            >
+                              Clear selection
+                            </Button>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                      {selectedBuyerInterests.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {selectedBuyerInterests.map((label) => (
+                            <Badge
+                              key={`buyer-interest-${label}`}
+                              variant="secondary"
+                              className="bg-green-100 text-green-700"
+                            >
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ) : (
@@ -668,9 +734,21 @@ export default function Home() {
                           </div>
                           <div className="text-gray-700">
                             <span className="font-medium text-gray-800">Interests</span>
-                            <p className="mt-1 text-gray-900">
-                              {buyerData.interests || "No preferences shared yet."}
-                            </p>
+                            {buyerData.interests.length === 0 ? (
+                              <p className="mt-1 text-gray-900">No preferences shared yet.</p>
+                            ) : (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {formatBuyerInterests(buyerData.interests).map((label) => (
+                                  <Badge
+                                    key={`${profile.id}-interest-${label}`}
+                                    variant="secondary"
+                                    className="bg-green-100 text-green-700"
+                                  >
+                                    {label}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </>
                       ) : null}
