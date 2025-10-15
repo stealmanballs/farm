@@ -131,7 +131,7 @@ export default function Home() {
     if (profileType === "seller" && sellerForm.products.length === 0) {
       setSellerForm((prev) => ({ ...prev, products: [createEmptySellerProduct()] }))
     }
-  }, [profileType, sellerForm.products.length, setSellerForm])
+  }, [profileType, sellerForm.products.length])
 
   const totals = useMemo(
     () =>
@@ -183,6 +183,7 @@ export default function Home() {
 
   const addSellerProduct = () => {
     setSellerForm((prev) => ({ ...prev, products: [...prev.products, createEmptySellerProduct()] }))
+    setError(null)
   }
 
   const updateSellerProduct = <K extends keyof SellerProduct>(
@@ -199,10 +200,16 @@ export default function Home() {
   }
 
   const removeSellerProduct = (productId: string) => {
-    setSellerForm((prev) => ({
-      ...prev,
-      products: prev.products.filter((product) => product.id !== productId),
-    }))
+    setSellerForm((prev) => {
+      const remaining = prev.products.filter((product) => product.id !== productId)
+
+      if (remaining.length === 0) {
+        return { ...prev, products: [createEmptySellerProduct()] }
+      }
+
+      return { ...prev, products: remaining }
+    })
+    setError(null)
   }
 
   const handleSellerProductImageChange = (productId: string, files: FileList | null) => {
@@ -224,10 +231,12 @@ export default function Home() {
       }
     }
     reader.readAsDataURL(file)
+    setError(null)
   }
 
   const clearSellerProducts = () => {
-    setSellerForm((prev) => ({ ...prev, products: [] }))
+    setSellerForm((prev) => ({ ...prev, products: [createEmptySellerProduct()] }))
+    setError(null)
   }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -304,6 +313,7 @@ export default function Home() {
       unit: product.unit.trim(),
       inventory: product.inventory.trim(),
       notes: product.notes.trim(),
+      image: product.image,
     }))
 
     const profileId = newProfileId()
@@ -410,7 +420,7 @@ export default function Home() {
     return entries
   }, [profileType, buyerForm, sellerForm])
 
-const selectedBuyerInterests = useMemo(
+  const selectedBuyerInterests = useMemo(
     () => formatBuyerInterests(buyerForm.interests),
     [buyerForm.interests]
   )
@@ -656,37 +666,39 @@ const selectedBuyerInterests = useMemo(
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="farmName">Farm or business name *</Label>
-                      <Input
-                        id="farmName"
-                        value={sellerForm.farmName}
-                        placeholder="Sunny Acres Farm"
-                        onChange={(event) => updateSeller("farmName", event.target.value)}
-                      />
-                    </div>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="farmName">Farm or business name *</Label>
+                        <Input
+                          id="farmName"
+                          value={sellerForm.farmName}
+                          placeholder="Sunny Acres Farm"
+                          onChange={(event) => updateSeller("farmName", event.target.value)}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="farmDescription">Short description</Label>
-                      <Textarea
-                        id="farmDescription"
-                        rows={3}
-                        placeholder="Family-run farm specializing in seasonal produce."
-                        value={sellerForm.farmDescription}
-                        onChange={(event) => updateSeller("farmDescription", event.target.value)}
-                      />
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="farmDescription">Short description</Label>
+                        <Textarea
+                          id="farmDescription"
+                          rows={3}
+                          placeholder="Family-run farm specializing in seasonal produce."
+                          value={sellerForm.farmDescription}
+                          onChange={(event) => updateSeller("farmDescription", event.target.value)}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="primaryProducts">Primary products</Label>
-                      <Textarea
-                        id="primaryProducts"
-                        rows={2}
-                        placeholder="Heirloom tomatoes, mixed greens, fresh herbs"
-                        value={sellerForm.primaryProducts}
-                        onChange={(event) => updateSeller("primaryProducts", event.target.value)}
-                      />
+                      <div className="space-y-2">
+                        <Label htmlFor="primaryProducts">Primary products</Label>
+                        <Textarea
+                          id="primaryProducts"
+                          rows={2}
+                          placeholder="Heirloom tomatoes, mixed greens, fresh herbs"
+                          value={sellerForm.primaryProducts}
+                          onChange={(event) => updateSeller("primaryProducts", event.target.value)}
+                        />
+                      </div>
                     </div>
 
                     <div className="grid gap-5 md:grid-cols-2">
@@ -715,6 +727,123 @@ const selectedBuyerInterests = useMemo(
                           placeholder="$50 order minimum"
                           onChange={(event) => updateSeller("minimumOrder", event.target.value)}
                         />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 rounded-xl border p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <Label className="text-base font-semibold">Product catalog</Label>
+                          <p className="text-sm text-gray-500">
+                            Add each product you offer with pricing, inventory, and an optional photo.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={addSellerProduct}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add product
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={clearSellerProducts}>
+                            Reset catalog
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        {sellerForm.products.map((product, index) => (
+                          <div key={product.id} className="space-y-4 rounded-lg border bg-white/60 p-4 shadow-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm font-medium text-gray-700">Product {index + 1}</p>
+                              {sellerForm.products.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => removeSellerProduct(product.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Remove product</span>
+                                </Button>
+                              )}
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor={`product-name-${product.id}`}>Product name *</Label>
+                              <Input
+                                id={`product-name-${product.id}`}
+                                value={product.name}
+                                placeholder="Heritage tomatoes"
+                                onChange={(event) => updateSellerProduct(product.id, "name", event.target.value)}
+                              />
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <div className="space-y-2">
+                                <Label htmlFor={`product-price-${product.id}`}>Price *</Label>
+                                <Input
+                                  id={`product-price-${product.id}`}
+                                  value={product.price}
+                                  placeholder="4.50"
+                                  onChange={(event) => updateSellerProduct(product.id, "price", event.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`product-unit-${product.id}`}>Unit</Label>
+                                <Input
+                                  id={`product-unit-${product.id}`}
+                                  value={product.unit}
+                                  placeholder="per lb"
+                                  onChange={(event) => updateSellerProduct(product.id, "unit", event.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`product-inventory-${product.id}`}>Inventory</Label>
+                                <Input
+                                  id={`product-inventory-${product.id}`}
+                                  value={product.inventory}
+                                  placeholder="24 crates available"
+                                  onChange={(event) => updateSellerProduct(product.id, "inventory", event.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor={`product-image-${product.id}`}>Product photo</Label>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border bg-white">
+                                  {product.image ? (
+                                    <img
+                                      src={product.image}
+                                      alt={product.name ? `${product.name} preview` : `Product ${index + 1} preview`}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-gray-500">No photo</span>
+                                  )}
+                                </div>
+                                <Input
+                                  id={`product-image-${product.id}`}
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(event) => handleSellerProductImageChange(product.id, event.target.files)}
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500">JPEG or PNG up to 2 MB.</p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor={`product-notes-${product.id}`}>Notes</Label>
+                              <Textarea
+                                id={`product-notes-${product.id}`}
+                                rows={2}
+                                placeholder="Harvest windows, packaging details, or pickup instructions"
+                                value={product.notes}
+                                onChange={(event) => updateSellerProduct(product.id, "notes", event.target.value)}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -919,10 +1048,57 @@ const selectedBuyerInterests = useMemo(
                             <span className="text-gray-900">{sellerData.fulfillment || "Not provided"}</span>
                           </div>
                           <div className="text-gray-700">
-                            <span className="font-medium text-gray-800">Products</span>
+                            <span className="font-medium text-gray-800">Primary products</span>
                             <p className="mt-1 text-gray-900">
-                              {sellerData.primaryProducts || "No products listed yet."}
+                              {sellerData.primaryProducts || "No primary products shared yet."}
                             </p>
+                          </div>
+                          <div className="text-gray-700">
+                            <span className="font-medium text-gray-800">Catalog</span>
+                            {(sellerData.products?.length ?? 0) === 0 ? (
+                              <p className="mt-1 text-gray-900">No products added yet.</p>
+                            ) : (
+                              <div className="mt-2 space-y-2">
+                                {(sellerData.products ?? []).slice(0, 3).map((product) => {
+                                  const displayPrice = product.price
+                                    ? `$${product.price}${product.unit ? `/${product.unit}` : ""}`
+                                    : null
+
+                                  return (
+                                    <div
+                                      key={`${profile.id}-product-${product.id}`}
+                                      className="flex items-center gap-3 rounded-md border bg-white/70 px-3 py-2"
+                                    >
+                                      {product.image ? (
+                                        <img
+                                          src={product.image}
+                                          alt={product.name ? `${product.name} preview` : "Product preview"}
+                                          className="h-10 w-10 rounded-md object-cover"
+                                        />
+                                      ) : (
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed text-[10px] text-gray-500">
+                                          No photo
+                                        </div>
+                                      )}
+                                      <div className="flex-1">
+                                        <p className="text-sm font-semibold text-gray-900">
+                                          {product.name || "Unnamed product"}
+                                        </p>
+                                        <p className="text-xs text-gray-600">
+                                          {displayPrice ?? "Price TBD"}
+                                          {product.inventory ? ` • ${product.inventory}` : ""}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                                {(sellerData.products?.length ?? 0) > 3 && (
+                                  <p className="text-xs text-gray-500">
+                                    +{(sellerData.products?.length ?? 0) - 3} more products in catalog
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </>
                       ) : null}

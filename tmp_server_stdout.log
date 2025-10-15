@@ -1,0 +1,8 @@
+> Ready on http://0.0.0.0:3000
+> Socket.IO server running at ws://0.0.0.0:3000/api/socketio
+ ○ Compiling / ...
+ ✓ Compiled / in 4.4s (787 modules)
+ GET / 200 in 5165ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 592ms (455 modules)
+ GET /favicon.ico 200 in 829ms
